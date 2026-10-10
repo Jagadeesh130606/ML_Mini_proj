@@ -453,20 +453,18 @@ with tab_fight:
         avg_blue_prob = 100.0 - avg_red_prob
 
         # Consensus Box
-        st.markdown(f"""
-        <div class="decision-box">
-            <div class="decision-sub">OFFICIAL CONSENSUS DECISION</div>
-            <div class="{winner_color_class}">{winner_name}</div>
-            <div style="color:#f7f7ea;font-weight:600;font-size:1.05rem;">
-                PREDICTED WINNER VIA CONSENSUS OF ALL 4 ML MODELS
-            </div>
-            
-            <div class="tug-container">
-                <div class="tug-red" style="width:{avg_red_prob:.1f}%;">🔴 RED {avg_red_prob:.1f}%</div>
-                <div class="tug-blue" style="width:{avg_blue_prob:.1f}%;">BLUE {avg_blue_prob:.1f}% 🔵</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        dec_html = f'''<div class="decision-box">
+<div class="decision-sub">OFFICIAL CONSENSUS DECISION</div>
+<div class="{winner_color_class}">{winner_name}</div>
+<div style="color:#f7f7ea;font-weight:600;font-size:1.05rem;">
+PREDICTED WINNER VIA CONSENSUS OF ALL 4 ML MODELS
+</div>
+<div class="tug-container">
+<div class="tug-red" style="width:{avg_red_prob:.1f}%;">🔴 RED {avg_red_prob:.1f}%</div>
+<div class="tug-blue" style="width:{avg_blue_prob:.1f}%;">BLUE {avg_blue_prob:.1f}% 🔵</div>
+</div>
+</div>'''
+        st.markdown(dec_html, unsafe_allow_html=True)
 
         # Per-model verdict chips
         st.markdown("### 📋 MODEL JUDGES SCORECARDS")
@@ -479,13 +477,8 @@ with tab_fight:
             chip_class = "verdict-chip-red" if w_corner == "Red" else "verdict-chip-blue"
             w_fighter = red_name if w_corner == "Red" else blue_name
             with cols_verdicts[i]:
-                st.markdown(f"""
-                <div class="{chip_class}">
-                    <div style="font-size:0.8rem;text-transform:uppercase;opacity:0.8">{m_name}</div>
-                    <div style="font-family:'Anton';font-size:1.3rem;margin:0.2rem 0">{w_fighter}</div>
-                    <div style="font-size:0.85rem">🔴 {res['red_prob']}% | 🔵 {res['blue_prob']}%</div>
-                </div>
-                """, unsafe_allow_html=True)
+                chip_html = f'<div class="{chip_class}"><div style="font-size:0.8rem;text-transform:uppercase;opacity:0.8">{m_name}</div><div style="font-family:\'Anton\';font-size:1.3rem;margin:0.2rem 0">{w_fighter}</div><div style="font-size:0.85rem">🔴 {res["red_prob"]}% | 🔵 {res["blue_prob"]}%</div></div>'
+                st.markdown(chip_html, unsafe_allow_html=True)
 
         st.info(f"**Consensus Breakdown**: {red_votes} out of {len(results)} models voted for **{red_name}**.")
 
@@ -506,17 +499,10 @@ with tab_fight:
             ("Takedown Acc", f"{red_stats['avg_TD_pct']*100:.0f}%", f"{blue_stats['avg_TD_pct']*100:.0f}%"),
         ]
 
-        tot_html = '<table class="tot-table">'
-        for label, r_val, b_val in tot_stats:
-            tot_html += f'''
-            <tr>
-                <td class="tot-val-red">{r_val}</td>
-                <td class="tot-label">{label}</td>
-                <td class="tot-val-blue">{b_val}</td>
-            </tr>
-            '''
-        tot_html += '</table>'
+        tot_rows = [f'<tr><td class="tot-val-red">{r_val}</td><td class="tot-label">{label}</td><td class="tot-val-blue">{b_val}</td></tr>' for label, r_val, b_val in tot_stats]
+        tot_html = f'<table class="tot-table">{"".join(tot_rows)}</table>'
         st.markdown(tot_html, unsafe_allow_html=True)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 2: SCORECARDS (Model Performance)
