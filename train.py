@@ -92,13 +92,18 @@ def main():
     df_clean = full_clean(df_raw)
 
     # ------------------------------------------------------------------
-    # STEP 3: Sort chronologically (critical for time-based split)
+    # STEP 3: Sort chronologically & report dataset statistics
     # ------------------------------------------------------------------
-    print("\n[Step 3] Sorting fights chronologically...")
+    print("\n[Step 3] Sorting fights chronologically & reporting stats...")
     if "date" in df_clean.columns:
         df_clean = df_clean.sort_values("date").reset_index(drop=True)
         print(f"[INFO] Date range: {df_clean['date'].min().date()} "
               f"-> {df_clean['date'].max().date()}")
+
+    red_rate_overall = df_clean["target"].mean()
+    print(f"[STATS] Cleaned Fights Count  : {len(df_clean)}")
+    print(f"[STATS] Date Range            : {df_clean['date'].min().date()} -> {df_clean['date'].max().date()}")
+    print(f"[STATS] Red Win Rate (Overall): {red_rate_overall:.4f} ({red_rate_overall*100:.2f}%)")
 
     # ------------------------------------------------------------------
     # STEP 4: Feature engineering
@@ -117,7 +122,11 @@ def main():
     split_idx = int(len(X) * (1 - TEST_FRACTION))
     X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
-    print(f"[INFO] Train: {len(X_train)} fights | Test: {len(X_test)} fights")
+    
+    red_rate_train = y_train.mean()
+    red_rate_test  = y_test.mean()
+    print(f"[INFO] Train: {len(X_train)} fights | Red Win Rate: {red_rate_train:.4f} ({red_rate_train*100:.2f}%)")
+    print(f"[INFO] Test : {len(X_test)} fights | Red Win Rate: {red_rate_test:.4f} ({red_rate_test*100:.2f}%)")
     print("[INFO] WHY TIME-BASED SPLIT? Future fight data must never leak")
     print("       into training. We train on older fights and test on newer ones.")
 
@@ -133,9 +142,12 @@ def main():
     # ------------------------------------------------------------------
     # STEP 7: Evaluate on test set
     # ------------------------------------------------------------------
-    print("\n[Step 7] Evaluating on held-out test set...")
-    results_df = evaluate_on_test_set(trained_results, X_test, y_test, verbose=True)
+    print("\n[Step 7] Evaluating on held-out test set (including Always Red baseline)...")
+    results_df = evaluate_on_test_set(
+        trained_results, X_test, y_test, y_train=y_train, n_splits=CV_SPLITS, verbose=True
+    )
     print_comparison_table(results_df)
+
 
     # ------------------------------------------------------------------
     # STEP 8: Feature importance

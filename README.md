@@ -2,7 +2,7 @@
 
 > **Machine Learning Subject — Mini Project**
 > Department of Computer Science / Information Technology
-> Academic Year: 2025-2026
+> Academic Year: 2026
 
 ---
 
@@ -37,9 +37,9 @@ This is a **binary classification** problem:
 ## Objectives
 
 1. Implement a complete ML pipeline: data loading → preprocessing → feature engineering → training → evaluation → prediction.
-2. Compare four ML algorithms on the same dataset.
-3. Use time-aware validation to avoid data leakage.
-4. Build a simple Streamlit web interface for live demonstration.
+2. Compare four ML algorithms on the same real dataset against an Always Red baseline.
+3. Use time-aware validation to avoid data leakage and temporal lookahead.
+4. Build a Streamlit web interface for live demonstration.
 5. Report honest, reproducible evaluation metrics.
 
 ---
@@ -48,26 +48,33 @@ This is a **binary classification** problem:
 
 | Property | Value |
 |---|---|
-| Source | UFC fight statistics (CSV format) |
+| Source | Real UFC historical fight dataset |
 | Location | `data/ufc_fights.csv` |
-| Expected rows | ~1500–3355 fights |
-| Features per fight | ~26 comparative features (after engineering) |
+| Raw Dataset Rows | 6,012 fights (144 columns, dates 1994-03-11 to 2021-03-20) |
+| Draws Removed | 110 fights (non-binary outcomes) |
+| Pre-2010 Fights Removed | 1,244 fights (dropped due to early dataset label bias) |
+| Final Cleaned Fights | 4,673 fights |
+| Final Date Range | 2010-01-02 to 2021-03-20 |
+| Features per fight | 28 comparative features (26 numerical diffs + 2 stance categoricals) |
 | Target | Winner: Red (1) / Blue (0) |
-| Date range | 2010–2024 |
+| Red Win Rate (Overall) | 58.85% (2,750 Red wins / 1,923 Blue wins) |
+| Train Set (80%) | 3,738 fights (2010-01-02 to 2019-04-13 \| 58.64% Red wins) |
+| Test Set (20%) | 935 fights (2019-04-13 to 2021-03-20 \| 59.68% Red wins) |
 
-**To use a real dataset:**
-Place your UFC CSV file in the `data/` directory.
-The system auto-detects and adapts to the column structure.
+---
 
-Recommended source: [Kaggle — UFC Fight Historical Data](https://www.kaggle.com/rajeevw/ufcdata)
+## Data Issue We Found and Fixed
 
-If no dataset is found, a synthetic mock dataset is generated automatically.
+During initial data inspection, we identified a severe **label collection bias in pre-2010 fights**:
+- Out of 1,244 fights before year 2010, **1,229 fights (98.8%) were recorded as Red wins** and 0 as Blue wins (with 15 draws).
+- This synthetic artifact taught models a fake pattern and caused the first fold of `TimeSeriesSplit` cross-validation (1994–2009) to contain only a single class (Red wins), resulting in `NaN` cross-validation scores for SGD Classifier and Gradient Boosting.
+- **Fix**: We set a named cutoff constant `MIN_YEAR = 2010` in `src/preprocessing.py`. Filtering out pre-2010 fights restored a realistic outcome distribution (~58.85% Red wins) and completely resolved the single-class fold issue, filling all cross-validation scores with valid metrics.
 
 ---
 
 ## Features Used
 
-All features are **comparative differences** (Red − Blue):
+All numerical features are **comparative differences** (Red − Blue):
 
 | Feature | Description |
 |---|---|
@@ -78,32 +85,37 @@ All features are **comparative differences** (Red − Blue):
 | `diff_wins` | Total wins difference |
 | `diff_losses` | Total losses difference |
 | `diff_current_win_streak` | Current win streak difference |
+| `diff_longest_win_streak` | Longest win streak difference |
+| `diff_total_rounds_fought` | Total rounds fought difference |
+| `diff_total_title_bouts` | Total title bouts difference |
 | `diff_avg_SIG_STR_landed` | Avg significant strikes/min difference |
 | `diff_avg_SIG_STR_pct` | Strike accuracy difference |
 | `diff_avg_TD_landed` | Avg takedowns/15min difference |
 | `diff_avg_TD_pct` | Takedown accuracy difference |
 | `diff_avg_SUB_ATT` | Submission attempts difference |
+| `diff_win_by_KO/TKO` | KO/TKO wins difference |
+| `diff_win_by_Submission` | Submission wins difference |
+| `diff_win_by_Decision_Unanimous` | Unanimous decision wins difference |
 | `R_Stance`, `B_Stance` | Fighter stance (categorical) |
-| + more... | Additional win-method and round statistics |
 
 ---
 
 ## Methodology
 
 ```
-Dataset
+Real UFC Dataset (6,012 raw rows)
    ↓
-Data Cleaning (remove draws, parse dates, drop duplicates)
+Data Cleaning (remove 110 draws, parse dates, drop 1,244 pre-2010 fights, drop duplicates)
    ↓
 Target Creation (1 = Red wins, 0 = Blue wins)
    ↓
-Chronological Sort (by fight date)
+Chronological Sort (2010-01-02 to 2021-03-20)
    ↓
-Feature Engineering (Red − Blue differences)
+Feature Engineering (28 Red − Blue comparative diff & stance features)
    ↓
-Train/Test Split (80% older fights train | 20% newer fights test)
+Train/Test Split (80% older fights train [3,738] | 20% newer fights test [935])
    ↓
-Preprocessing Pipeline (Imputation → Scaling → OHE)
+Preprocessing Pipeline (Median Imputation → StandardScaler → OneHotEncoder)
    ↓
 ┌────────────────────────┐
 │ 1. SGD Classifier      │
@@ -112,7 +124,7 @@ Preprocessing Pipeline (Imputation → Scaling → OHE)
 │ 4. Gradient Boosting   │
 └────────────────────────┘
    ↓
-Evaluation (Accuracy, Precision, Recall, F1)
+Evaluation (Accuracy, Precision, Recall, F1, CV Mean ± Std vs Always Red Baseline)
    ↓
 Streamlit UI (live prediction)
 ```
@@ -135,7 +147,7 @@ Streamlit UI (live prediction)
 
 ### 4. Gradient Boosting
 - 100 estimators, learning rate 0.1, max depth 4
-- Reference paper found this performed marginally best (~60% accuracy)
+- Reference paper found this performed marginally best
 
 ---
 
@@ -145,21 +157,22 @@ Streamlit UI (live prediction)
 ufc_fight_prediction/
 │
 ├── data/
-│   └── ufc_fights.csv          ← Place real dataset here
+│   └── ufc_fights.csv          ← Real UFC dataset
 │
 ├── src/
 │   ├── data_loader.py           ← Auto-detect & load CSV
-│   ├── preprocessing.py         ← Clean, create target
+│   ├── preprocessing.py         ← Clean, filter pre-2010, create target
 │   ├── feature_engineering.py   ← Red−Blue difference features
 │   ├── train_models.py          ← 4 ML pipelines + TimeSeriesSplit CV
-│   ├── evaluate_models.py       ← Metrics + feature importance
+│   ├── evaluate_models.py       ← Metrics + baseline + feature importance
 │   └── predict.py               ← Prediction interface
 │
 ├── models/
 │   └── trained_models.pkl       ← Saved pipelines
 │
 ├── results/
-│   ├── model_comparison.csv     ← Accuracy, Precision, Recall, F1
+│   ├── model_comparison_before.csv ← Historical baseline comparison before fix
+│   ├── model_comparison.csv     ← Accuracy, Precision, Recall, F1, CV Mean/Std
 │   └── feature_importance.csv   ← Tree-based importances
 │
 ├── app.py                        ← Streamlit web app
@@ -174,26 +187,26 @@ ufc_fight_prediction/
 ## Evaluation Metrics
 
 - **Accuracy** — Overall correct predictions / total predictions
-- **Precision** — Of all predicted Red wins, how many were actually Red wins
-- **Recall** — Of all actual Red wins, how many did we correctly predict
-- **F1 Score** — Harmonic mean of Precision and Recall
+- **Precision** — Weighted precision across classes
+- **Recall** — Weighted recall across classes
+- **F1 Score** — Weighted harmonic mean of Precision and Recall
 - **CV Accuracy** — TimeSeriesSplit cross-validation (mean ± std)
 
 ---
 
 ## Results
 
-> **Note**: Results below are from the synthetic mock dataset.
-> Replace `data/ufc_fights.csv` with real UFC data for research-grade results.
-> Results will differ from the reference paper's reported ~60% accuracy since we use a different dataset.
+Evaluation on held-out chronological test set (935 fights, 2019-04-13 to 2021-03-20):
 
-After running `python train.py`, results are saved to `results/model_comparison.csv`.
+| Model | Accuracy | Precision | Recall | F1 Score | CV Mean | CV Std |
+|---|---|---|---|---|---|---|
+| **SGD Classifier** | 54.44% | 55.95% | 54.44% | 54.86% | 55.54% | ±2.69% |
+| **MLP Classifier** | **62.35%** | **61.02%** | **62.35%** | **60.57%** | **59.94%** | ±2.39% |
+| **Decision Tree** | 59.14% | 59.14% | 59.14% | 59.14% | 53.16% | ±2.26% |
+| **Gradient Boosting** | 59.89% | 58.51% | 59.89% | 58.58% | 58.72% | ±2.38% |
+| **Always Red (baseline)** | 59.68% | 35.62% | 59.68% | 44.61% | 58.27% | ±3.02% |
 
----
-
-## Screenshots
-
-*(Add screenshots of the Streamlit app here for your college submission.)*
+The best performing model, **MLP Classifier**, achieved a test accuracy of **62.35%** (and **60.57% F1 score**), outperforming the Always Red baseline (59.68% accuracy, 44.61% F1 score) by **2.67 percentage points** in accuracy and **15.96 percentage points** in F1 score.
 
 ---
 
@@ -210,7 +223,6 @@ pip install -r requirements.txt
 
 ### Step 2: Train the models
 ```bash
-cd ufc_fight_prediction
 python train.py
 ```
 
@@ -221,21 +233,14 @@ streamlit run app.py
 
 The app will open at: **http://localhost:8501**
 
-### Using a Real Dataset
-1. Download the UFC dataset from Kaggle (see link above)
-2. Place the CSV file in `data/` directory (rename to `ufc_fights.csv`)
-3. Run `python train.py` again
-
 ---
 
 ## Future Scope
 
-1. **More data**: Use the full historical UFC dataset (3000+ fights)
-2. **Advanced features**: Fighter age at time of fight, days since last fight, weight-class-specific models
-3. **Better models**: XGBoost, Random Forest, ensemble voting
-4. **Hyperparameter tuning**: GridSearchCV / Optuna
-5. **Real-time data**: Integrate with UFCStats API for live predictions
-6. **Imbalance handling**: SMOTE or class weighting for better minority-class recall
+1. **Advanced features**: Days since last fight, fighter Elo rating, weight-class specific trends
+2. **Better models**: XGBoost, LightGBM, Random Forest ensemble
+3. **Hyperparameter tuning**: Optuna / GridSearchCV
+4. **Imbalance handling**: Threshold tuning for decision boundaries
 
 ---
 
@@ -243,10 +248,9 @@ The app will open at: **http://localhost:8501**
 
 This project is a **Machine Learning Subject Mini Project**. It is NOT a final-year or major project.
 
-- Results are from our own dataset and implementation
-- We do NOT claim to match or replicate the exact results of the reference paper
+- Results are evaluated on real UFC fight statistics from 2010 to 2021
 - This system should NOT be used for betting or real-world decision making
-- The reference paper is used as inspiration for algorithm selection and methodology only
+- The reference paper is used as inspiration for algorithm selection and methodology
 
 ---
 
@@ -256,5 +260,3 @@ This project is a **Machine Learning Subject Mini Project**. It is NOT a final-y
 2. Scikit-learn documentation: https://scikit-learn.org
 3. Streamlit documentation: https://streamlit.io
 4. UFC fight data: https://www.kaggle.com/rajeevw/ufcdata
-5. Brownlee, J. (2020). *Imbalanced Classification with Python*. Machine Learning Mastery.
-6. Géron, A. (2022). *Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow* (3rd ed.)

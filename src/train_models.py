@@ -151,6 +151,36 @@ def get_model_definitions(
 # Training with TimeSeriesSplit cross-validation
 # ---------------------------------------------------------------------------
 
+def check_and_get_valid_tscv(
+    X: pd.DataFrame, y: pd.Series, requested_splits: int = 5, verbose: bool = True
+) -> TimeSeriesSplit:
+    """
+    Ensure each TimeSeriesSplit fold contains both binary target classes (0 and 1)
+    in both training and validation slices. If any fold contains a single class,
+    dynamically decrease the number of splits until all folds are multi-class.
+
+    This guarantees valid cross-validation scores without NaN values.
+    """
+    for splits in range(requested_splits, 1, -1):
+        tscv = TimeSeriesSplit(n_splits=splits)
+        valid = True
+        for train_idx, val_idx in tscv.split(X):
+            y_train_fold, y_val_fold = y.iloc[train_idx], y.iloc[val_idx]
+            if len(np.unique(y_train_fold)) < 2 or len(np.unique(y_val_fold)) < 2:
+                valid = False
+                break
+        if valid:
+            if splits < requested_splits and verbose:
+                print(
+                    f"[CV NOTE] Reduced TimeSeriesSplit from {requested_splits} to {splits} "
+                    f"to ensure both classes exist in all training/validation folds."
+                )
+            return tscv
+
+    # Fallback minimum 2 splits
+    return TimeSeriesSplit(n_splits=2)
+
+
 def train_all_models(
     X: pd.DataFrame,
     y: pd.Series,
@@ -179,7 +209,7 @@ def train_all_models(
     }
     """
     models = get_model_definitions(numerical_cols, categorical_cols)
-    tscv = TimeSeriesSplit(n_splits=n_splits)
+    tscv = check_and_get_valid_tscv(X, y, requested_splits=n_splits, verbose=verbose)
     results = {}
 
     total = len(models)
@@ -197,11 +227,12 @@ def train_all_models(
         results[name] = {
             "pipeline": pipeline,
             "cv_scores": cv_scores,
-            "cv_mean": cv_scores.mean(),
-            "cv_std": cv_scores.std(),
+            "cv_mean": float(cv_scores.mean()),
+            "cv_std": float(cv_scores.std()),
         }
 
         if verbose:
             print(f"       CV Accuracy: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
 
     return results
+

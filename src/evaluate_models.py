@@ -22,19 +22,27 @@ from sklearn.metrics import (
 )
 
 
+from sklearn.model_selection import TimeSeriesSplit
+
+
 def evaluate_on_test_set(
     trained_results: dict,
     X_test: pd.DataFrame,
     y_test: pd.Series,
+    y_train: pd.Series = None,
+    n_splits: int = 5,
     verbose: bool = True,
 ) -> pd.DataFrame:
     """
-    Evaluate each trained pipeline on the held-out test set.
+    Evaluate each trained pipeline on the held-out test set,
+    and include the Always Red (baseline).
 
     Parameters
     ----------
     trained_results : dict from train_models.train_all_models()
     X_test, y_test  : chronologically later test split
+    y_train         : training set target (used for baseline CV score computation)
+    n_splits        : number of splits for baseline CV evaluation
 
     Returns
     -------
@@ -42,6 +50,7 @@ def evaluate_on_test_set(
     """
     rows = []
 
+    # 1. Evaluate trained models
     for name, info in trained_results.items():
         pipeline = info["pipeline"]
         y_pred = pipeline.predict(X_test)
@@ -72,8 +81,48 @@ def evaluate_on_test_set(
             print(f"  CV Accuracy   : {info['cv_mean']:.4f} ± {info['cv_std']:.4f}")
             print(f"  Confusion Matrix:\n{cm}")
 
+    # 2. Evaluate Always Red baseline
+    y_pred_base = np.ones(len(y_test), dtype=int)
+    acc_b  = accuracy_score(y_test, y_pred_base)
+    prec_b = precision_score(y_test, y_pred_base, zero_division=0, average="weighted")
+    rec_b  = recall_score(y_test, y_pred_base, zero_division=0, average="weighted")
+    f1_b   = f1_score(y_test, y_pred_base, zero_division=0, average="weighted")
+    cm_b   = confusion_matrix(y_test, y_pred_base, labels=[0, 1])
+
+    cv_mean_b, cv_std_b = np.nan, np.nan
+    if y_train is not None:
+        tscv = TimeSeriesSplit(n_splits=n_splits)
+        cv_scores_b = [
+            accuracy_score(y_train.iloc[val_idx], np.ones(len(val_idx), dtype=int))
+            for _, val_idx in tscv.split(y_train)
+        ]
+        cv_mean_b = float(np.mean(cv_scores_b))
+        cv_std_b  = float(np.std(cv_scores_b))
+
+    rows.append({
+        "Model"        : "Always Red (baseline)",
+        "Accuracy"     : acc_b,
+        "Precision"    : prec_b,
+        "Recall"       : rec_b,
+        "F1 Score"     : f1_b,
+        "CV Mean"      : cv_mean_b,
+        "CV Std"       : cv_std_b,
+        "Confusion Matrix": cm_b.tolist(),
+    })
+
+    if verbose:
+        print(f"\n--- Always Red (baseline) ---")
+        print(f"  Test Accuracy : {acc_b:.4f} ({acc_b*100:.2f}%)")
+        print(f"  Precision     : {prec_b:.4f}")
+        print(f"  Recall        : {rec_b:.4f}")
+        print(f"  F1 Score      : {f1_b:.4f}")
+        if not np.isnan(cv_mean_b):
+            print(f"  CV Accuracy   : {cv_mean_b:.4f} ± {cv_std_b:.4f}")
+        print(f"  Confusion Matrix:\n{cm_b}")
+
     results_df = pd.DataFrame(rows)
     return results_df
+
 
 
 def get_feature_importance(

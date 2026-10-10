@@ -122,6 +122,26 @@ def remove_leakage_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# Minimum year cutoff for fights.
+# Pre-2010 UFC fights in this dataset suffer from severe label collection bias
+# (nearly 98% of pre-2010 fights record Red as the winner, with 0 Blue wins recorded).
+# Dropping pre-2010 fights restores a realistic class distribution (~54-62% Red win rate)
+# and fixes single-class folds in TimeSeriesSplit cross-validation.
+MIN_YEAR = 2010
+
+
+def filter_pre_2010_fights(df: pd.DataFrame, min_year: int = MIN_YEAR) -> pd.DataFrame:
+    """Drop fights prior to MIN_YEAR due to historical label collection bias."""
+    if "date" not in df.columns or df["date"].isnull().all():
+        return df
+    original = len(df)
+    df = df[df["date"].dt.year >= min_year].copy()
+    dropped = original - len(df)
+    if dropped:
+        print(f"[CLEAN] Dropped {dropped} fights prior to {min_year}-01-01 (pre-2010 label bias artifact).")
+    return df
+
+
 def remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     """Drop exact duplicate rows."""
     before = len(df)
@@ -137,9 +157,10 @@ def full_clean(df: pd.DataFrame) -> pd.DataFrame:
     Run the complete cleaning pipeline in order:
       0. Normalize column names to lowercase
       1. Parse dates
-      2. Remove duplicates
-      3. Create target
-      4. Remove leakage columns
+      2. Drop pre-2010 fights (label bias artifact)
+      3. Remove duplicates
+      4. Create target
+      5. Remove leakage columns
     """
     print("\n=== Data Cleaning Pipeline ===")
 
@@ -147,8 +168,10 @@ def full_clean(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [c.lower() if c.lower() in ("winner", "date") else c for c in df.columns]
 
     df = parse_dates(df)
+    df = filter_pre_2010_fights(df)
     df = remove_duplicates(df)
     df = create_target(df)
     df = remove_leakage_columns(df)
     print(f"[CLEAN] Final cleaned shape: {df.shape}")
     return df
+

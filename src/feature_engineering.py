@@ -52,6 +52,7 @@ DIFF_STAT_PAIRS = [
     "win_by_Decision_Majority",
     "win_by_Decision_Split",
     "win_by_Decision_Unanimous",
+    "win_by_KO/TKO",
     "win_by_KO",
     "win_by_Submission",
     "win_by_TKO_Doctor_Stoppage",
@@ -88,7 +89,8 @@ def create_diff_features(df: pd.DataFrame, verbose: bool = True) -> pd.DataFrame
         )
 
     if verbose:
-        print(f"\n[FEAT] Creating {len(pairs)} difference features from column pairs.")
+        print(f"\n[FEAT] Creating {len(pairs)} difference features from column pairs:")
+        print(f"[FEAT] Matched pairs: {pairs}")
 
     feat_df = pd.DataFrame(index=df.index)
 
@@ -109,6 +111,7 @@ def create_diff_features(df: pd.DataFrame, verbose: bool = True) -> pd.DataFrame
         print(f"[FEAT] Feature matrix shape: {feat_df.shape}")
 
     return feat_df
+
 
 
 def get_feature_columns(feat_df: pd.DataFrame) -> Tuple[list, list]:

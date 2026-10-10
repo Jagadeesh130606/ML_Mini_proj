@@ -403,13 +403,14 @@ elif page == "📊 Model Comparison":
     results_df = load_results()
 
     # Metric summary cards
-    best_model = results_df.loc[results_df["Accuracy"].idxmax()]
+    trained_models_df = results_df[results_df["Model"] != "Always Red (baseline)"]
+    best_model = trained_models_df.loc[trained_models_df["Accuracy"].idxmax()]
     col1, col2, col3, col4 = st.columns(4)
     metrics = [
         ("🏆 Best Model",     best_model["Model"],               "#a855f7"),
         ("🎯 Best Accuracy",  f"{best_model['Accuracy']*100:.1f}%", "#2979ff"),
         ("📏 Best F1 Score",  f"{results_df['F1 Score'].max()*100:.1f}%", "#ff4757"),
-        ("🔄 Models Trained", str(len(results_df)),              "#ffa502"),
+        ("🔄 Models Trained", str(len(trained_models_df)),       "#ffa502"),
     ]
     for col, (label, val, color) in zip([col1, col2, col3, col4], metrics):
         with col:
@@ -427,25 +428,23 @@ elif page == "📊 Model Comparison":
     st.markdown("### 📋 Detailed Results")
     display_df = results_df[["Model", "Accuracy", "Precision", "Recall", "F1 Score", "CV Mean", "CV Std"]].copy()
     for col in ["Accuracy", "Precision", "Recall", "F1 Score", "CV Mean"]:
-        display_df[col] = display_df[col].apply(lambda x: f"{x*100:.2f}%")
-    display_df["CV Std"] = results_df["CV Std"].apply(lambda x: f"±{x*100:.2f}%")
+        display_df[col] = display_df[col].apply(lambda x: f"{x*100:.2f}%" if pd.notnull(x) else "N/A")
+    display_df["CV Std"] = results_df["CV Std"].apply(lambda x: f"±{x*100:.2f}%" if pd.notnull(x) else "N/A")
     st.dataframe(display_df, use_container_width=True, hide_index=True)
 
     st.markdown("---")
 
     # Accuracy comparison bar chart
     st.markdown("### 📊 Accuracy Comparison")
-    colors = ["#ff4757", "#a855f7", "#ffa502", "#2979ff"]
+    colors = ["#ff4757", "#a855f7", "#ffa502", "#2979ff", "#718093"]
     fig = go.Figure(go.Bar(
         x=results_df["Model"],
         y=results_df["Accuracy"] * 100,
-        marker_color=colors,
+        marker_color=colors[:len(results_df)],
         text=[f"{v*100:.1f}%" for v in results_df["Accuracy"]],
         textposition="outside",
         textfont=dict(color="white"),
     ))
-    fig.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.3)",
-                  annotation_text="Baseline (50%)")
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="white"),
@@ -460,11 +459,12 @@ elif page == "📊 Model Comparison":
     metric_cols = ["Accuracy", "Precision", "Recall", "F1 Score"]
     fig2 = go.Figure()
     for i, row in results_df.iterrows():
+        color_idx = i if i < len(colors) else len(colors) - 1
         fig2.add_trace(go.Bar(
             name=row["Model"],
             x=metric_cols,
             y=[row[m] * 100 for m in metric_cols],
-            marker_color=colors[i],
+            marker_color=colors[color_idx],
             opacity=0.85,
         ))
     fig2.update_layout(
@@ -485,7 +485,7 @@ elif page == "📊 Model Comparison":
         x=results_df["Model"],
         y=results_df["CV Mean"] * 100,
         error_y=dict(type="data", array=results_df["CV Std"] * 100, visible=True),
-        marker_color=colors,
+        marker_color=colors[:len(results_df)],
         text=[f"{v*100:.1f}%" for v in results_df["CV Mean"]],
         textposition="outside",
         textfont=dict(color="white"),
@@ -498,6 +498,7 @@ elif page == "📊 Model Comparison":
         height=350, showlegend=False,
     )
     st.plotly_chart(fig3, use_container_width=True)
+
 
     st.info(
         "**Why TimeSeriesSplit?** UFC fights happen chronologically. Using a random split "
